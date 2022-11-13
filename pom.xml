@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>ee</groupId>
+    <artifactId>ee</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.tors42</groupId>
+            <artifactId>chariot</artifactId>
+            <version>0.0.56</version>
+        </dependency>
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.0</version>
+        </dependency>
+     </dependencies>
+
+    <properties>
+        <maven.compiler.release>19</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <build>
+        <sourceDirectory>src/ee</sourceDirectory>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jlink-plugin</artifactId>
+                <version>3.1.0</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>jlink</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jlink</goal>
+                        </goals>
+                        <configuration>
+                            <addOptions>
+                                <addOption>--enable-preview</addOption>
+                            </addOptions>
+                            <launcher>ee-cli=ee/ee.CLI</launcher>
+                            <classifier>build</classifier>
+                            <compress>1</compress>
+                            <addModules>
+                                <addModule>ee</addModule>
+                                <addModule>chariot</addModule>
+                                <addModule>info.picocli</addModule>
+                            </addModules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.10.1</version>
+                <configuration>
+                    <compilerArgs>
+                        <compilerArg>--enable-preview</compilerArg>
+                        <arg>-Aproject=${project.groupId}/${project.artifactId}</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>info.picocli</groupId>
+                            <artifactId>picocli-codegen</artifactId>
+                            <version>4.7.0</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
