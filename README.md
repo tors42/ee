@@ -26,7 +26,7 @@ To start the application, run the `ee` or `ee.bat` file in the `ee-0.0.1/bin` di
 3. Open web page [Lichess Analysis](https://lichess.org/analysis) and click the hamburger menu in the lower right, to find the `Engine Manager` selection and change from `Lichess` to `External Engine`. _Hint, you can change the name `External Engine` to something more personal in the application in the `Engine` tab_  
 ![3-select](https://user-images.githubusercontent.com/4084220/204158508-fb588f74-a6c6-42c0-81f0-8ff99d852715.png)
 
-Analysing moves will now use the external engine instead of the Lichess web verison.
+Analysing moves will now use the external engine instead of the Lichess web version.
 ![4-analyze](https://user-images.githubusercontent.com/4084220/204158505-da191ece-d1d7-4f57-90c9-d668cff19599.png)
 
 ## Libraries
