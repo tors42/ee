@@ -52,23 +52,25 @@ public class Build {
         del(lib);
 
         Path cache = Path.of("cache");
+        Path cacheLibs = cache.resolve("libs");
+        Path cacheJmods = cache.resolve("jmods");
+        Path cacheStock = cache.resolve("stockfish");
+
         Path moduleSrc = Path.of("src");
         Path classes = out.resolve("classes");
         Path moduleOut = out.resolve("modules");
         Path metaInf = out.resolve("META-INF");
         Path manifest = out.resolve("MANIFEST.MF");
 
-        Files.createDirectories(cache);
-        Files.createDirectories(lib);
-        Files.createDirectories(moduleOut);
-        Files.createDirectories(metaInf);
+        for (var dir : List.of(cacheLibs, cacheJmods, cacheStock, lib, moduleOut, metaInf))
+            Files.createDirectories(dir);
 
         var executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
         var cacheDependenciesTasks = deps.stream()
             .map(dep -> (Callable<Void>) () -> {
-                Path cachedDep = cache.resolve(dep.filename());
-                Path cachedDepSources = cache.resolve(dep.filenameSources());
+                Path cachedDep = cacheLibs.resolve(dep.filename());
+                Path cachedDepSources = cacheLibs.resolve(dep.filenameSources());
                 if (! cachedDep.toFile().exists()) {
                     System.out.println("Downloading " + dep.filename());
                     try (var source = dep.uri().toURL().openStream();
@@ -92,7 +94,7 @@ public class Build {
         var stockfishFutures = stockfishList.stream()
             .filter(sf -> cross || sf.osArch().equals(Platform.current()))
             .map(sf -> (Runnable) () -> {
-                Path cachedStockfish = cache.resolve(sf.filename());
+                Path cachedStockfish = cacheStock.resolve(sf.filename());
                 if (! cachedStockfish.toFile().exists()) {
                     if (sf.downloadable()) {
                         System.out.println("Downloading " + sf.filename());
@@ -169,7 +171,7 @@ public class Build {
 
         var stockfish = stockfishList.stream()
             .filter(sf -> sf.osArch().equals(Platform.current()))
-            .map(sf -> cache.resolve(sf.filename()))
+            .map(sf -> cacheStock.resolve(sf.filename()))
             .findFirst().orElse(Path.of(""));
 
         if (stockfish.toFile().exists()) {
@@ -314,7 +316,7 @@ public class Build {
             var jmodsPaths = jdks.stream()
                 .map(jdk -> new VersionedJdk(jdk, javaVersion))
                 .map(jdk -> new DownloadableVersionedJdk(jdk, toOpenJdkUri.apply(jdk)))
-                .map(jdk -> new JmodsPath(jdk, toJmodsPath.apply(jdk, cache)))
+                .map(jdk -> new JmodsPath(jdk, toJmodsPath.apply(jdk, cacheJmods)))
                 .toList();
 
             var downloadAndUnpackTasks = jmodsPaths.stream()
@@ -358,7 +360,7 @@ public class Build {
 
                     var cachedStockfish = stockfishList.stream()
                         .filter(sf -> sf.osArch().equals(jdk.downloadableVersionedJdk().versionedJdk().jdk().osArch()))
-                        .map(sf -> cache.resolve(sf.filename()))
+                        .map(sf -> cacheStock.resolve(sf.filename()))
                         .findFirst().orElse(Path.of(""));
 
                     if (cachedStockfish.toFile().exists()) {
