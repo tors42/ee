@@ -1,0 +1,65 @@
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number to use'
+        required: true
+        type: string
+
+jobs:
+  macstock:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/cache@v3
+        id: cache-stockfish
+        with:
+          key: "macstock-15"
+          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+
+      - name: Brew Stockfish
+        if: steps.cache-stockfish.outputs.cache-hit != 'true'
+        run: HOMEBREW_NO_INSTALL_CLEANUP=1 brew install stockfish
+
+      - name: Package Stockfish
+        if: steps.cache-stockfish.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p cache/stockfish
+          cd /usr/local/Cellar/stockfish/15
+          zip -r ${OLDPWD}/cache/stockfish/stockfish_15_mac_x64_modern.zip .
+          cd -
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: macstock-15
+          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+
+  build:
+    needs: macstock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '19'
+
+      - uses: actions/cache@v3
+        with:
+          path: cache/
+          key: "jmods-19.0.1-stockfish-15"
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: macstock-15
+          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+
+      - name: build
+        run: java build/Build.java version=${{ inputs.version }} cross
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: runtimes
+          path: out/*.zip
+
