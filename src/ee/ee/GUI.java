@@ -54,26 +54,16 @@ class GUI {
 
     void run() {
         var tabbed = new JTabbedPane();
-        var enginePanel = enginePanel();
-        var lichessPanel = lichessPanel();
-        var aboutPanel = aboutPanel();
-
+        tabbed.addTab("Engine", enginePanel());
+        tabbed.addTab("Lichess", lichessPanel());
+        tabbed.addTab("About", aboutPanel());
+        tabbed.setSelectedIndex(config.client() instanceof ClientAuth auth ? 0 : 1);
         tabbed.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tabbed.addTab("Engine", enginePanel);
-        tabbed.addTab("Lichess", lichessPanel);
-        tabbed.addTab("About", aboutPanel);
-
-        if (config.client() instanceof ClientAuth auth) {
-            tabbed.setSelectedComponent(enginePanel);
-        } else {
-            tabbed.setSelectedComponent(lichessPanel);
-        }
 
         var panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
-        var title = new JLabel(frame.getTitle());
-        title.putClientProperty("FlatLaf.styleClass", "h00");
+        var title = styleClass(new JLabel(frame.getTitle()), "h00");
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(title);
         panel.add(new JSeparator(JSeparator.HORIZONTAL));
@@ -110,81 +100,6 @@ class GUI {
                         config.engineId()
                         ));
         }
-    }
-
-    record LabeledField<T>(JLabel label, T field) {
-        static LabeledField<JTextField> ofTextField(String label, String field) {
-            return ofTextField(label, field, false);
-        }
-
-        static LabeledField<JTextField> ofTextField(String label, String field, boolean editable) {
-            var jlabel = new JLabel(label + ":");
-            var jfield = new JTextField(field);
-            jlabel.putClientProperty("FlatLaf.styleClass", "h4");
-            jfield.putClientProperty("FlatLaf.styleClass", "semibold");
-            jfield.setEditable(editable);
-            jfield.setHorizontalAlignment(JTextField.TRAILING);
-            jlabel.setLabelFor(jfield);
-            return new LabeledField<>(jlabel, jfield);
-        }
-
-        static LabeledField<EngineSelection> ofFileChooser(Component parent, String label, boolean includeBuiltIn, boolean builtIn) {
-            return ofFileChooser(parent, label, includeBuiltIn, builtIn, null);
-        }
-
-        static LabeledField<EngineSelection> ofFileChooser(Component parent, String label, boolean includeBuiltIn, boolean builtIn, Path path) {
-            var jlabel = new JLabel(label + ":");
-            var checkBox = includeBuiltIn ? new JCheckBox("Built-In", builtIn) : null;
-            var selectEngine = new EngineSelection(path, checkBox);
-            var button = new JButton(path == null ? "Select Engine" : path.getFileName().toString());
-            if (path != null) button.setToolTipText(path.toString());
-
-            if (checkBox != null) {
-                if (builtIn) button.setEnabled(false);
-                checkBox.addItemListener(e -> button.setEnabled(e.getStateChange() != 1));
-            }
-
-            var fileChooser = path == null ? new JFileChooser() : new JFileChooser(path.toFile());
-
-            button.addActionListener(__ -> {
-                int returnVal = fileChooser.showOpenDialog(parent);
-                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    SwingUtilities.invokeLater(() -> {
-                        var selectedPath = fileChooser.getSelectedFile().toPath();
-                        selectEngine.setPath(selectedPath);
-                        button.setText(selectedPath.getFileName().toString());
-                        button.setToolTipText(selectedPath.toString());
-                        var p = parent;
-                        while (p != null) {
-                            p = p.getParent();
-                            if (p instanceof JDialog dialog) {
-                                dialog.pack();
-                                break;
-                            }
-                        }
-                    });
-                }
-            });
-
-            jlabel.putClientProperty("FlatLaf.styleClass", "h4");
-            button.putClientProperty("FlatLaf.styleClass", "semibold");
-            jlabel.setLabelFor(selectEngine);
-            if (checkBox != null) {
-                selectEngine.add(checkBox);
-            }
-            selectEngine.add(button);
-            return new LabeledField<>(jlabel, selectEngine);
-        }
-    }
-
-    static class EngineSelection extends JPanel {
-        Path path;
-        JCheckBox builtIn;
-
-        EngineSelection(Path path, JCheckBox builtIn) { super(new FlowLayout()); this.path = path; this.builtIn = builtIn; }
-        void setPath(Path path) { this.path = path; }
-        Path getPath() { return path; }
-        boolean builtIn() { return builtIn != null && builtIn.isSelected(); }
     }
 
     JPanel enginePanel() {
@@ -278,10 +193,9 @@ class GUI {
                 """;
 
             var oauthPanel = new JPanel(new BorderLayout());
-            var textArea = new JTextArea(info);
+            var textArea = styleClass(new JTextArea(info), "small");
             oauthPanel.add(textArea, BorderLayout.CENTER);
             textArea.setEditable(false);
-            textArea.putClientProperty("FlatLaf.styleClass", "small");
 
             lichessPanel.add(oauthPanel);
             login.addActionListener(__ -> {
@@ -334,13 +248,91 @@ class GUI {
             %s - https://github.com/tors42/ee
 
             """.formatted(GUI.class.getModule().getDescriptor().toNameAndVersion());
-        var textArea = new JTextArea(info);
-        textArea.putClientProperty("FlatLaf.styleClass", "small");
+        var textArea = styleClass(new JTextArea(info), "small");
         panel.add(textArea);
         textArea.setEditable(false);
         return panel;
     }
 
+    record LabeledField<T>(JLabel label, T field) {
+        static LabeledField<JTextField> ofTextField(String label, String field) {
+            return ofTextField(label, field, false);
+        }
+
+        static LabeledField<JTextField> ofTextField(String label, String field, boolean editable) {
+            var jlabel = styleClass(new JLabel(label + ":"), "h4");
+            var jfield = styleClass(new JTextField(field), "semibold");
+            jfield.setEditable(editable);
+            jfield.setHorizontalAlignment(JTextField.TRAILING);
+            jlabel.setLabelFor(jfield);
+            return new LabeledField<>(jlabel, jfield);
+        }
+
+        static LabeledField<EngineSelection> ofFileChooser(Component parent, String label, boolean includeBuiltIn, boolean builtIn) {
+            return ofFileChooser(parent, label, includeBuiltIn, builtIn, null);
+        }
+
+        static LabeledField<EngineSelection> ofFileChooser(Component parent, String label, boolean includeBuiltIn, boolean builtIn, Path path) {
+            var jlabel = styleClass(new JLabel(label + ":"), "h4");
+            var button = styleClass(new JButton(), "semibold");
+            var fileChooser = new JFileChooser();
+            if (path != null) {
+                fileChooser.setCurrentDirectory(path.toFile());
+                button.setText(path.getFileName().toString());
+                button.setToolTipText(path.toString());
+            } else {
+                button.setText("Select Engine");
+            }
+
+            var checkBox = includeBuiltIn ? new JCheckBox("Built-In", builtIn) : null;
+            var selectEngine = new EngineSelection(path, checkBox);
+
+            if (checkBox != null) {
+                if (builtIn) button.setEnabled(false);
+                checkBox.addItemListener(e -> button.setEnabled(e.getStateChange() != 1));
+            }
+
+            button.addActionListener(__ -> {
+                int returnVal = fileChooser.showOpenDialog(parent);
+                if (returnVal == JFileChooser.APPROVE_OPTION) {
+                    SwingUtilities.invokeLater(() -> {
+                        var selectedPath = fileChooser.getSelectedFile().toPath();
+                        selectEngine.setPath(selectedPath);
+                        button.setText(selectedPath.getFileName().toString());
+                        button.setToolTipText(selectedPath.toString());
+                        var p = parent;
+                        while (p != null) {
+                            p = p.getParent();
+                            if (p instanceof JDialog dialog) {
+                                dialog.pack();
+                                break;
+                            }
+                        }
+                    });
+                }
+            });
+
+            jlabel.setLabelFor(selectEngine);
+            if (checkBox != null) selectEngine.add(checkBox);
+            selectEngine.add(button);
+            return new LabeledField<>(jlabel, selectEngine);
+        }
+    }
+
+    static class EngineSelection extends JPanel {
+        Path path;
+        JCheckBox builtIn;
+
+        EngineSelection(Path path, JCheckBox builtIn) { super(new FlowLayout()); this.path = path; this.builtIn = builtIn; }
+        void setPath(Path path) { this.path = path; }
+        Path getPath() { return path; }
+        boolean builtIn() { return builtIn != null && builtIn.isSelected(); }
+    }
+
+    static <T extends JComponent> T styleClass(T component, String value) {
+        component.putClientProperty("FlatLaf.styleClass", value);
+        return component;
+    }
 
     record EngineInput(JPanel panel, Supplier<EngineConf> engineConf) {}
 
