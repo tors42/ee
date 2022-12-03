@@ -5,6 +5,7 @@ import java.lang.System.Logger.Level;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import chariot.api.ExternalEngineAuth;
 import chariot.model.*;
@@ -35,6 +36,7 @@ class Main implements Runnable {
             logging.log(Level.ERROR, () -> "Response: %s".formatted(f));
             throw new RuntimeException(f.toString());
         }
+        logging.log(Level.TRACE, res);
         return res;
     }
 
@@ -90,9 +92,10 @@ class Main implements Runnable {
     }
 
     public void run() {
+
         var engine = Engine.init(engineCmd.toString(), parameters, logging);
-        var executor = Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().factory());
         register_engine(api, engine, secret);
+        var analysing = new AtomicBoolean(false);
 
         while(true)
             switch(ok(api.acquire(secret))) {
@@ -101,26 +104,29 @@ class Main implements Runnable {
                     try {Thread.sleep(5000);}catch(InterruptedException ie) {}
                 }
                 case None<ExternalEngineRequest> none -> {
-                    if (engine.alive && engine.idle_time().toSeconds() > parameters.keepAlive()) {
+                    if (engine.alive && ! analysing.get() && engine.idle_time().toSeconds() > parameters.keepAlive()) {
                         logging.log(Level.INFO, "Terminating idle engine");
                         engine.terminate();
                     }
                 }
                 case Entry<ExternalEngineRequest> one -> {
                     engine.stop();
+                    analysing.set(false);
 
                     if (! engine.alive) engine = Engine.init(engineCmd.toString(), parameters, logging);
 
                     var job_started = new Semaphore(0);
                     final Engine engineRef = engine;
-                    executor.submit(() -> {
+                    Thread.ofPlatform().daemon().start(() -> {
                         logging.log(Level.INFO, () -> "Handling job %s".formatted(one.entry().id()));
                         try {
                             var inputStream = engineRef.analyse(one.entry().work(), job_started);
+                            analysing.set(true);
                             ok(api.answer(one.entry().id(), inputStream));
                         } catch (IOException ioe) {
                             logging.log(Level.ERROR, "Error while trying to answer", ioe);
                         } finally {
+                            analysing.set(false);
                             job_started.release();
                         }
                     });
