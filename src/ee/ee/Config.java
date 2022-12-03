@@ -87,12 +87,18 @@ record Config(String providerUuid, String engineId, EngineConf engineConf, Clien
                 .toList();
 
             return new Parameters(
-                    prefs.getInt("maxHash", 512),
+                    prefs.getInt("maxHash", defaultMaxHashMB()),
                     prefs.getInt("maxThreads", Runtime.getRuntime().availableProcessors()),
                     prefs.getInt("defaultDepth", 25),
-                    prefs.getInt("keepAlive", 300),
+                    prefs.getInt("keepAlive", 60),
                     options
                     );
+        }
+
+        static int defaultMaxHashMB() {
+            int maxMB = (int) (Runtime.getRuntime().maxMemory()/1024/1024/2);
+            int roundedMaxMB = (int) Math.pow(2, Math.ceil(Math.log(maxMB) / Math.log(2)));
+            return Math.max(512, roundedMaxMB);
         }
 
         static void store(EngineConf engineConf) {
