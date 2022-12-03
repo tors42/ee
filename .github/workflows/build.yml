@@ -16,7 +16,7 @@ jobs:
         id: cache-stockfish
         with:
           key: "macstock-15"
-          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+          path: stockfish_15_mac_x64_modern.zip
 
       - name: Brew Stockfish
         if: steps.cache-stockfish.outputs.cache-hit != 'true'
@@ -27,13 +27,13 @@ jobs:
         run: |
           mkdir -p cache/stockfish
           cd /usr/local/Cellar/stockfish/15
-          zip -r ${OLDPWD}/cache/stockfish/stockfish_15_mac_x64_modern.zip .
+          zip -r ${OLDPWD}/stockfish_15_mac_x64_modern.zip .
           cd -
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: macstock-15
-          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+          path: stockfish_15_mac_x64_modern.zip
 
   build:
     needs: macstock
@@ -50,15 +50,20 @@ jobs:
           path: cache/
           key: "jmods-19.0.1-stockfish-15"
 
-      - uses: actions/download-artifact@v2
+      - name: find cache
+        run: find cache
+
+      - uses: actions/download-artifact@v3
         with:
           name: macstock-15
-          path: cache/stockfish/stockfish_15_mac_x64_modern.zip
+
+      - name: cp into cache
+        run: cp -f stockfish_15_mac_x64_modern.zip cache/stockfish/
 
       - name: build
         run: java build/Build.java version=${{ inputs.version }} cross
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: runtimes
           path: out/*.zip
