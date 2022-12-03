@@ -64,7 +64,7 @@ Here's an example which writes logs for "ALL" levels to a file named `ee0.log` a
     Main.level = ALL
 
 
-[Logging Overview - Default Configration](https://docs.oracle.com/en/java/javase/19/core/java-logging-overview.html#GUID-B83B652C-17EA-48D9-93D2-563AE1FF8EDA)
+[Logging Overview - Default Configration](https://docs.oracle.com/en/java/javase/19/core/java-logging-overview.html)
 
 ## Develop
 
