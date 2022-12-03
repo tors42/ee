@@ -9,6 +9,7 @@ import java.io.*;
 import java.nio.file.Path;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 
 import com.formdev.flatlaf.*;
 
@@ -104,7 +105,7 @@ class GUI {
 
     JPanel enginePanel() {
         var panel = new JPanel();
-        List<LabeledField<? extends Component>> pairs = new ArrayList<>();
+        List<LabeledField<?>> pairs = new ArrayList<>();
         pairs.add(LabeledField.ofTextField("Name", config.engineConf().name()));
         pairs.addAll(switch(config.engineConf()) {
             case EngineConf.Custom custom -> {
@@ -133,10 +134,12 @@ class GUI {
         buttonPanel.add(configure);
 
         configure.addActionListener(__ -> {
+
             var engineInput = enginePanelEdit();
             boolean done = false;
             while (!done) {
-                int option = JOptionPane.showConfirmDialog(frame, engineInput.panel(), "Configure Engine", JOptionPane.OK_CANCEL_OPTION);
+                int option = JOptionPane.showConfirmDialog(frame, engineInput.panel(), "Configure Engine", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
                 if (option == JOptionPane.OK_OPTION) {
                     var engineConf = engineInput.engineConf().get();
                     if (engineConf != null) {
@@ -254,7 +257,7 @@ class GUI {
         return panel;
     }
 
-    record LabeledField<T>(JLabel label, T field) {
+    record LabeledField<T extends JComponent>(JLabel label, T field) {
         static LabeledField<JTextField> ofTextField(String label, String field) {
             return ofTextField(label, field, false);
         }
@@ -317,6 +320,62 @@ class GUI {
             selectEngine.add(button);
             return new LabeledField<>(jlabel, selectEngine);
         }
+
+        static LabeledField<UCIOptions> ofTable(String label, List<UciOption> options) {
+            var jlabel = styleClass(new JLabel(label + ":"), "h4");
+            var jtable = styleClass(new JTable(), "semibold");
+
+            var tableModel = new DefaultTableModel();
+
+            tableModel.setColumnIdentifiers(new String[] {"Name", "Value"});
+            for (var option : options) tableModel.addRow(new String[] { option.name(), option.value() });
+
+            jtable.setModel(tableModel);
+
+            var uciOptions = new UCIOptions(jtable);
+            var scrollPane = new JScrollPane(jtable);
+
+            var tablePreferredSize = jtable.getPreferredSize();
+            scrollPane.setPreferredSize(new Dimension(tablePreferredSize.width, jtable.getRowHeight() * 5));
+
+            var buttonPanel = new JPanel(new FlowLayout());
+            var add = styleClass(new JButton("Add"), "semibold");
+            var remove = styleClass(new JButton("Remove"), "semibold");
+            remove.setEnabled(false);
+
+            jtable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            var selectionModel = jtable.getSelectionModel();
+
+            selectionModel.addListSelectionListener(event -> {
+                remove.setEnabled(jtable.getSelectedRow() != -1);
+            });
+
+            add.addActionListener(__ -> {
+                tableModel.addRow(new String[] { "", ""});
+                int rows = tableModel.getRowCount();
+                if (rows > 0) {
+                    jtable.editCellAt(rows-1, 0);
+                    jtable.transferFocus();
+                }
+            });
+
+            remove.addActionListener(__ -> {
+                int row = jtable.getSelectedRow();
+                if (row != -1) {
+                    tableModel.removeRow(row);
+                }
+            });
+
+            buttonPanel.add(add);
+            buttonPanel.add(remove);
+
+            uciOptions.setLayout(new BoxLayout(uciOptions, BoxLayout.Y_AXIS));
+            uciOptions.add(scrollPane);
+            uciOptions.add(buttonPanel);
+
+            jlabel.setLabelFor(jtable);
+            return new LabeledField<>(jlabel, uciOptions);
+        }
     }
 
     static class EngineSelection extends JPanel {
@@ -328,6 +387,24 @@ class GUI {
         Path getPath() { return path; }
         boolean builtIn() { return builtIn != null && builtIn.isSelected(); }
     }
+
+    static class UCIOptions extends JPanel {
+        JTable table;
+        UCIOptions(JTable table) { this.table = table;  }
+        List<UciOption> options() {
+            var model = table.getModel();
+            List<UciOption> uciOptions = new ArrayList<>();
+            for (int row = 0; row < model.getRowCount(); row++) {
+                String name = (String) model.getValueAt(row, 0);
+                String value = (String) model.getValueAt(row, 1);
+                if (name.isBlank() || value.isBlank()) continue;
+                uciOptions.add(new UciOption(name, value));
+            }
+            if (uciOptions.isEmpty()) return List.of();
+            return uciOptions;
+        }
+    }
+
 
     static <T extends JComponent> T styleClass(T component, String value) {
         component.putClientProperty("FlatLaf.styleClass", value);
@@ -354,28 +431,27 @@ class GUI {
         var maxThreads = LabeledField.ofTextField("Max threads", String.valueOf(parameters.maxThreads()), true);
         var defaultDepth = LabeledField.ofTextField("Default depth", String.valueOf(parameters.defaultDepth()), true);
         var keepAlive = LabeledField.ofTextField("Idle Keep-Alive (s)", String.valueOf(parameters.keepAlive()), true);
-        //todo, var options = LabeledField.ofTable("Extra UCI Options", parameters.options());
+        var options = LabeledField.ofTable("Extra UCI Options", parameters.options());
 
-        List<LabeledField<? extends Component>> pairs = List.of(
+        List<LabeledField<?>> pairs = List.of(
                 name,
                 engine,
                 maxHash,
                 maxThreads,
                 defaultDepth,
-                keepAlive
-                //todo, options
+                keepAlive,
+                options
                 );
 
         var buttonPanel = new JPanel(new FlowLayout());
 
         Supplier<EngineConf> supplier = () -> {
-            List<UciOption> options = List.of();
             var params = new Parameters(
                     Integer.parseInt(maxHash.field().getText()),
                     Integer.parseInt(maxThreads.field().getText()),
                     Integer.parseInt(defaultDepth.field().getText()),
                     Integer.parseInt(keepAlive.field().getText()),
-                    options
+                    options.field().options()
                     );
 
             List<String> variants = List.of();
@@ -399,7 +475,7 @@ class GUI {
         return new EngineInput(panel, supplier);
     }
 
-    void layoutComponents(JPanel panel, List<LabeledField<? extends Component>> pairs, JPanel buttonPanel) {
+    void layoutComponents(JPanel panel, List<LabeledField<?>> pairs, JPanel buttonPanel) {
         panel.setBackground(panel.getBackground().brighter());
         buttonPanel.setBackground(panel.getBackground());
 
