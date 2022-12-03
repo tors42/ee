@@ -37,6 +37,35 @@ Analysing moves will now use the external engine instead of the Lichess web vers
 - [Chariot](https://github.com/tors42/chariot) for communication with Lichess.
 
 
+## Logging
+
+There exists a logger in `ee` named "Main", which can be configured in `ee-0.0.2/conf/logging.properties`  
+
+Here's an example which writes logs for "ALL" levels to a file named `ee0.log` and logs for "INFO" level to console,
+
+    handlers=java.util.logging.ConsoleHandler, java.util.logging.FileHandler
+    .level= INFO
+    java.util.logging.FileHandler.pattern = ee%u.log
+    java.util.logging.FileHandler.limit = 50000
+    java.util.logging.FileHandler.count = 1
+    java.util.logging.FileHandler.maxLocks = 100
+    java.util.logging.FileHandler.formatter = java.util.logging.XMLFormatter
+    
+    java.util.logging.ConsoleHandler.level = INFO
+    java.util.logging.ConsoleHandler.formatter = java.util.logging.SimpleFormatter
+    
+    java.util.logging.FileHandler.level = ALL
+    java.util.logging.FileHandler.formatter = java.util.logging.SimpleFormatter
+    
+    
+    # java.util.logging.SimpleFormatter.format=%4$s: %5$s [%1$tc]%n
+    
+    # com.xyz.foo.level = SEVERE
+    Main.level = ALL
+
+
+[Logging Overview - Default Configration](https://docs.oracle.com/en/java/javase/19/core/java-logging-overview.html#GUID-B83B652C-17EA-48D9-93D2-563AE1FF8EDA)
+
 ## Develop
 
 Build requires Java 19+
