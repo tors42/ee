@@ -4,7 +4,7 @@ import java.io.*;
 import java.lang.System.Logger.Level;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
 
 import chariot.model.ExternalEngineWork;
@@ -26,6 +26,7 @@ public class Engine {
     Instant last_used;
     Process process;
     Lock lock;
+    BlockingQueue<CmdAndParams> engineOutput = new ArrayBlockingQueue<>(4096);
     System.Logger logger;
 
     private Engine() {}
@@ -49,15 +50,46 @@ public class Engine {
         lock = new ReentrantLock();
         this.logger = logger;
         try {
-            process = new ProcessBuilder(cmd).start();
-        } catch (IOException ioe) {
-            logger.log(Level.ERROR, "Failed to start stockfish", ioe);
+            process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            Thread.ofPlatform().start(() -> {
+                try {
+                    while (true) {
+                        String line = process.inputReader().readLine();
+                        if (line == null) {
+                            terminate();
+                            return;
+                        }
+
+                        line = line.stripTrailing();
+                        if (line.isEmpty()) continue;
+
+                        String[] arr = line.split(" ", 2);
+
+                        var cmdAndParams = new CmdAndParams(arr[0], arr.length == 2 ? arr[1] : "");
+                        if (! "info".equals(arr[0]))
+                            logger.log(Level.DEBUG, () -> "%d >> %s".formatted(process.pid(), cmdAndParams));
+
+                        if (! engineOutput.offer(cmdAndParams)) {
+                            logger.log(Level.ERROR, "queue full!");
+                            terminate();
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.ERROR, "Failed to start engine", e);
+                }
+            });
+        } catch (Exception ioe) {
+            logger.log(Level.ERROR, "Failed to read engine output", ioe);
             throw new RuntimeException(ioe);
         }
 
         uci();
         setoption("UCI_AnalyseMode", "true");
         setoption("UCI_Chess960", "true");
+        setoption("Threads", String.valueOf(threads));
+        setoption("Hash", String.valueOf(hash));
+        setoption("multiPv", String.valueOf(multi_pv));
+
         for (var option : parameters.options)
             setoption(option.name(), option.value());
     }
@@ -71,34 +103,23 @@ public class Engine {
     }
 
     public void terminate() {
+        logger.log(Level.DEBUG, "Terminating");
         process.destroy();
         alive = false;
     }
 
     void send(String command) throws IOException {
         logger.log(Level.DEBUG, () -> "%d << %s".formatted(process.pid(), command));
-        process.outputWriter().write(command + "\n");
+        process.outputWriter().write(command);
+        process.outputWriter().newLine();
         process.outputWriter().flush();
     }
 
     CmdAndParams recv() throws IOException {
-        while(true) {
-            String line = process.inputReader().readLine();
-            if (line == null) {
-                alive = false;
-                throw new EOFException();
-            }
-
-            line = line.stripTrailing();
-            if (line.isEmpty()) continue;
-
-            String[] arr = line.split(" ", 2);
-
-            var cmdAndParams = new CmdAndParams(arr[0], arr.length == 2 ? arr[1] : "");
-            if (! "info".equals(arr[0]))
-                logger.log(Level.DEBUG, () -> "%d >> %s".formatted(process.pid(), cmdAndParams));
-
-            return cmdAndParams;
+        try {
+            return engineOutput.take();
+        } catch (InterruptedException ie) {
+            throw new RuntimeException(ie);
         }
     }
 
@@ -108,17 +129,17 @@ public class Engine {
         while(!done)
             switch (recv()) {
                 case CmdAndParams(var command, var params) when command.equals("option") -> {
-    String name = "";
-    Iterator<String> iter = Arrays.stream(params.split(" ")).iterator();
-    while (iter.hasNext())
-        switch(iter.next()) {
-            case "name" -> name = iter.next();
-            case "var" -> { if (name.equals("UCI_Variant")) supportedVariants.add(iter.next()); }
-                default -> {}
-        }
-                }
+                    String name = "";
+                    Iterator<String> iter = Arrays.stream(params.split(" ")).iterator();
+                    while (iter.hasNext())
+                        switch(iter.next()) {
+                            case "name" -> name = iter.next();
+                            case "var" -> { if (name.equals("UCI_Variant")) supportedVariants.add(iter.next()); }
+                            default -> {}
+                        }
+                    }
                 case CmdAndParams(var command, var __) when command.equals("uciok") -> done = true;
-default -> {}
+                default -> {}
             }
 
         if (! supportedVariants.isEmpty())
@@ -169,7 +190,9 @@ default -> {}
 
         if (options_changed) isready();
 
-        send("position fen %s moves %s".formatted(work.initialFen(), String.join(" ", work.moves())));
+        String position = "position fen %s moves %s".formatted(work.initialFen(), String.join(" ", work.moves()));
+        logger.log(Level.DEBUG, "Analyzing position [%s]".formatted(position));
+        send(position);
 
         if (work.infinite()) {
             send("go infinite");
@@ -180,31 +203,39 @@ default -> {}
         job_started.release();
 
         var pipedOutputStream = new PipedOutputStream();
-        var pipedInputStream = new PipedInputStream(pipedOutputStream, 128_000);
+        var pipedInputStream = new PipedInputStream(pipedOutputStream, 8192);
 
         Thread.ofPlatform().name("engine-to-request-body").start(() -> {
             try {
-                while(switch(recv()) {
-                    case CmdAndParams(var command, var __) when command.equals("bestmove") -> false;
-                    case CmdAndParams(var command, var params) when command.equals("info") -> {
-                        if (params.contains("score")) {
-                            pipedOutputStream.write((command + " " + params + "\n").getBytes());
-                            pipedOutputStream.flush();
+                boolean responding = true;
+                logger.log(Level.INFO, () -> "[%s] Analyzing [%s]".formatted(session_id, position));
+                while(responding) {
+                    var cmd = recv();
+                    logger.log(Level.TRACE, () -> "[%s] - %s %s".formatted(session_id, cmd.command(), cmd.params()));
+
+                    responding = switch(cmd) {
+                        case CmdAndParams(var command, var params) when command.equals("bestmove") -> false;
+                        case CmdAndParams(var command, var params) when command.equals("info") -> {
+                            if (params.contains("score")) {
+                                String line = command + " " + params + "\n";
+                                logger.log(Level.DEBUG, () -> "[%s] Writing to request body: %s".formatted(session_id, line));
+                                pipedOutputStream.write(line.getBytes());
+                            }
+                            yield true;
                         }
-                        yield true;
-                    }
-                    default -> true;
-                }) {}
-
+                        default -> true;
+                    };
+                    pipedOutputStream.flush();
+                    last_used = Instant.now();
+                }
+                logger.log(Level.INFO, () -> "[%s] Finished analyzing".formatted(session_id));
                 pipedOutputStream.close();
-
             } catch(IOException ioe) {
                 logger.log(Level.ERROR, ioe);
             } finally {
                 stop();
             }
         });
-        last_used = Instant.now();
         return pipedInputStream;
     }
 
