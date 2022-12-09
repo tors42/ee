@@ -11,9 +11,9 @@ If you already have a chess engine on your computer, you can download the
 archive without the `-embed.zip` suffix, and configure the application to use
 your existing binary.
 
-The archive contains a directory `ee-0.0.1` which you can unpack on your computer.
+The archive contains a directory `ee-0.0.2` which you can unpack on your computer.
 
-To start the application, run the `ee` or `ee.bat` file in the `ee-0.0.1/bin` directory.
+To start the application, run the `ee` or `ee.bat` file in the `ee-0.0.2/bin` directory.
 
 ## Run
 
